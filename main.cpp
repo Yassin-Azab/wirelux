@@ -21,12 +21,36 @@
 
 // ── Signal handling ──
 #include <csignal>             // signal(), SIGINT
-
+#include <iostream>
+#include <chrono> // Required for modern time handling
 // ── C++ standard library ──
-#include <iostream>            // std::cout, std::cerr
-#include <fstream>             // std::ifstream
-#include <sstream>             // std::istringstream
-#include <string>              // std::string, std::to_string, std::stoul, std::stoi
-#include <map>                 // std::map
-#include <cstring>             // memset()
-#include <cstdint>             // uint8_t, uint16_t, uint32_t, uint64_t
+
+int main{
+
+pcap_if_t* AllInterfaces = nullptr;
+char InterfaceErrorrs[PCAP_ERRBUF_SIZE];
+if (pcap_findalldevs(pcap_if_t **AllInterfaces, char *InterfaceErrorrs) == -1) {
+    std::cerr << "Error finding interfaces: " << InterfaceErrorrs << std::endl;
+    return 1;
+}
+int i=1;
+pcap_if_t* chosenInt=nullptr;
+for (pcap_if_t* CurrInt = AllInterfaces; CurrInt=(*CurrInt).next) {
+    if(!(CurrInt->flags & PCAP_IF_LOOPBACK)&& CurrInt ->flags & PCAP_IF_RUNNING && (dev->flags & PCAP_IF_CONNECTION_STATUS) == PCAP_IF_CONNECTION_STATUS_CONNECTED) ;
+        std::string line =std::format("{}. Interface Name: {}", i, (*CurrInt).name);
+        std::cout << line << std::endl;
+        i++;
+        if (chosenInt==nullptr && (CurrInt->name).std::string::contains(wl))
+            chosenInt=CurrInt;
+        else if (chosenInt==nullptr && CurrInt->next==nullptr)
+            chosenInt=CurrInt;
+}
+
+std::chrono::auto startTime = std::chrono::steady_clock::now(); + seconds(60);
+while (std::chrono::steady_clock::now() < startTime) {
+  
+}
+
+void pcap_freealldevs(pcap_if_t *AllInterfaces);
+AllInterfaces=nullptr;
+}
