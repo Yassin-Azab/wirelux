@@ -25,11 +25,37 @@
 #include <chrono> // Required for modern time handling
 // ── C++ standard library ──
 
-void packethandler(u_char *user, const struct pcap_pkthdr *h, u_char *bytes){
+struct AppStats {
+    uint64_t    bytes_sent     = 0;
+    uint64_t    bytes_received = 0;
+//ADD IP, SOURCE PORT, DESTINATION PORT???
+    uint64_t total() const {
+        return bytes_sent + bytes_received;
+    }
+};
 
+void packethandler(u_char* user, const struct pcap_pkthdr* header, const u_char* packet){
+if (header->caplen < 34) return;
+auto* app_data = reinterpret_cast<std::map<std::string, std::pair<AppStats, TimePoint>>*>(user);
+const struct ethhdr* eth =reinterpret_cast<const struct ethhdr*>(packet);
+if (ntohs(eth->h_proto) != ETH_P_IP) return;
+const struct iphdr* ip = reinterpret_cast<const struct iphdr*>(packet + 14);
+if ((ip->protocol != IPPROTO_TCP && ip->protocol != IPPROTO_UDP)|| ip->version != 4||ip->ihl < 5) return;
+const struct u_char* transport = packet + 14 + ip->ihl*4;
+if (ip->protocol == IPPROTO_TCP) { 
+const struct tcphdr* tcp = reinterpret_cast<const struct tcphdr*>(transport);
+}
+if (ip->protocol == IPPROTO_UDP) { 
+const struct udphdr* udp = reinterpret_cast<const struct udphdr*>(transport);
 }
 
+
+}
 pcap_t* g_handle = nullptr;  
+using TimePoint = std::chrono::time_point<std::chrono::system_clock>;
+std::map<std::string, std::pair<AppStats, TimePoint>> AppData;
+
+
 
 void on_ctrl_c(int) {
     if (g_handle) {pcap_breakloop(g_handle);}
@@ -62,8 +88,9 @@ if (g_handle == nullptr) {
     std::cerr << "Error opening device: " << InterfaceErrorrs << std::endl;
     return 2;
 }
+
+int pcap_loop(g_handle, -1, &packethandler, reinterpret_cast<u_char*>(&AppData));
 signal(SIGINT, on_ctrl_c);
-int pcap_loop(pcap_t* g_handle, -1, &packethandler, u_char *user);
 void pcap_breakloop(pcap_t *handle);
 void pcap_freealldevs(pcap_if_t *AllInterfaces);
 pcap_close(g_handle);
