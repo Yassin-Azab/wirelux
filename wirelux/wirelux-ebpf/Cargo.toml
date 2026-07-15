@@ -1,17 +1,9 @@
 [package]
 name = "wirelux-ebpf"
 version = "0.1.0"
-edition.workspace = true
+edition = "2021"
 
 [dependencies]
-wirelux-common = { path = "../wirelux-common" }
-
-aya-ebpf = { workspace = true }
-aya-log-ebpf = { workspace = true }
-
-[build-dependencies]
-which = { workspace = true }
-
-[[bin]]
-name = "wirelux"
-path = "src/main.rs"
+aya-ebpf     = { git = "https://github.com/aya-rs/aya", branch = "main" }
+aya-log-ebpf = { git = "https://github.com/aya-rs/aya", branch = "main" }
+wifi-monitor-common = { path = "../wifi-monitor-common" }
