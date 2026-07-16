@@ -1,56 +1,72 @@
-use aya::programs::KProbe;
-#[rustfmt::skip]
-use log::{debug, warn};
-use tokio::signal;
+use std::{fs,path::{Path, PathBuf}};
+use serde::{Deserialize, Serialize};
+use anyhow::{bail,Context, Result};
+use aya::{
+    include_bytes_aligned,
+    maps::RingBuf,
+    programs::KProbe,
+    Bpf
+};
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    env_logger::init();
+use rusqlite::Connection;
+use Tokio;
 
-    // Bump the memlock rlimit. This is needed for older kernels that don't use the
-    // new memcg based accounting, see https://lwn.net/Articles/837122/
-    let rlim = libc::rlimit {
-        rlim_cur: libc::RLIM_INFINITY,
-        rlim_max: libc::RLIM_INFINITY,
-    };
-    let ret = unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlim) };
-    if ret != 0 {
-        debug!("remove limit on locked memory failed, ret is: {ret}");
-    }
+use wirelux_common::AppBytes;
+const DEFAULT_DB_PATH: &str="./wirelux_log.db";
+const CONFIG_FILE: &str ="./config.toml";
+const SAVE_INTERVAL_SECS: u64=30;
 
-    // This will include your eBPF object file as raw bytes at compile-time and load it at
-    // runtime. This approach is recommended for most real-world use cases. If you would
-    // like to specify the eBPF program at runtime rather than at compile-time, you can
-    // reach for `Bpf::load_file` instead.
-    let mut ebpf = aya::Ebpf::load(aya::include_bytes_aligned!(concat!(
-        env!("OUT_DIR"),
-        "/wirelux"
-    )))?;
-    match aya_log::EbpfLogger::init(&mut ebpf) {
-        Err(e) => {
-            // This can happen if you remove all log statements from your eBPF program.
-            warn!("failed to initialize eBPF logger: {e}");
-        }
-        Ok(logger) => {
-            let mut logger =
-                tokio::io::unix::AsyncFd::with_interest(logger, tokio::io::Interest::READABLE)?;
-            tokio::task::spawn(async move {
-                loop {
-                    let mut guard = logger.readable_mut().await.unwrap();
-                    guard.get_inner_mut().flush();
-                    guard.clear_ready();
+struct Cli {save_path: PathLine,}
+
+fn print_usage(){
+    println("USAGE: wirelux [OPTIONS]");
+    println();
+    println("Options:");
+    println(" --out <path>   override current path");
+    println("-h, --help     show this message");
+}
+
+fn load_db()-> Result<PathBuf>{
+if !Path::new(CONFIG_FILE).exists(){fs::write(CONFIG_FILE,DEFAULT_DB_PATH)?};
+let mut contents=fs::read_to_string(CONFIG_FILE)?;
+if contents.trim().is_empty(){fs::write(CONFIG_FILE,DEFAULT_DB_PATH)?;
+    contents=DEFAULT_DB_PATH.to_string()};
+let first_line=contents.lines().next().context("config.toml is empty")?.trim();
+let path= PathBuf::from(first_line);
+Ok(path)}
+
+fn parge_args() {
+let mut args =std::env::args().skip(1);
+while let Some(arg)= args.next(){
+    match arg.as_str(){
+        "--out"=> {
+            let new_path=match args.next(){
+                Some(path) =>PathBuf::from(path),
+                None => {
+                    eprintln!("Error: --out requires a path");
+                    std::process::exit(1);
                 }
-            });
+            }; 
+            if let Err(e)=fs::write(CONFIG_FILE, new_path.clone().to_string_lossy().to_string()){
+                eprintln!("error writing config file: {e})");
+                std::process::exit(1);
+
+            }
+        },
+        "-h" | "--help" =>{
+            print_usage();
+            std::process::exit(0);
+        }
+        other =>{
+            print_usage();
+            eprintln("Unknown Argument");
+            std::process::exit(1);
         }
     }
-    let program: &mut KProbe = ebpf.program_mut("wirelux").unwrap().try_into()?;
-    program.load()?;
-    program.attach("tcp_sendmsg", 0)?;
 
-    let ctrl_c = signal::ctrl_c();
-    println!("Waiting for Ctrl-C...");
-    ctrl_c.await?;
-    println!("Exiting...");
+}
 
-    Ok(())
+}
+async fn main() -> anyhow::Result<()> {
+ 
 }

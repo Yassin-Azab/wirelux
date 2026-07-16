@@ -5,7 +5,8 @@ use aya_ebpf::{
     macros::{kprobe,kretprobe, map},
     programs::{ProbeContext, RetProbeContext},
     maps::RingBuf,
-    helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns}
+    helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns},
+    bindings::sock
 };
 use wirelux_common::AppBytes;
 
@@ -44,14 +45,14 @@ pub fn kprobe_tcp_send_msg(ctx: ProbeContext) -> u32{
 }
 
 unsafe fn try_tcp_sendmsg(ctx: &ProbeContext) -> Result<(), i64>{
-let arg: usize=ctx.arg(2).ok_or(-1i64)?;
-if arg ==0 { return Err((-1i64)); }
+let size: usize=ctx.arg(2).ok_or(-1i64)?;
+if size ==0 { return Err((-1i64)); }
 
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
 
 let comm:[u8;16]=bpf_get_current_comm().map_err(|e|e as i64)?;
-write_event(pid, comm, arg as u64, 1, 6)
+write_event(pid, comm, size as u64, 1, 6)
 
 }
 
@@ -64,14 +65,14 @@ pub fn kprobe_udp_send_msg(ctx: ProbeContext) -> u32{
 }
 
 unsafe fn try_udp_sendmsg(ctx: &ProbeContext) -> Result<(), i64>{
-let arg: usize=ctx.arg(2).ok_or(-1i64)?;
-if arg ==0 { return Err((-1i64)); }
+let size: usize=ctx.arg(2).ok_or(-1i64)?;
+if size ==0 { return Err((-1i64)); }
 
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
 
 let comm:[u8;16]=bpf_get_current_comm().map_err(|e|e as i64)?;
-write_event(pid, comm, arg as u64, 1, 17)
+write_event(pid, comm, size as u64, 1, 17)
 
 }
 
@@ -83,13 +84,13 @@ pub fn kretprobe_tcp_recv_msg(ctx: RetProbeContext) -> u32{
 }
 
 unsafe fn try_tcp_recvmsg(ctx: &RetProbeContext) ->  Result<(), i64>{
-let arg:i64 =ctx.ret() as i64;
-if arg < 0 {return Err((-1i64))}
+let size:i64 =ctx.ret() as i64;
+if size < 0 {return Err((-1i64))}
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
 
 let comm:[u8;16]=bpf_get_current_comm().map_err(|e|e as i64)?;
-write_event(pid, comm, arg as u64, 0, 17)
+write_event(pid, comm, size as u64, 0, 17)
 
 }
 
@@ -102,13 +103,13 @@ pub fn kretprobe_udp_recv_msg(ctx: RetProbeContext) -> u32{
 }
 
 unsafe fn try_udp_recvmsg(ctx: &RetProbeContext) -> Result<(), i64>{
-let arg:i64 =ctx.ret() as i64;
-if arg < 0 {return Err((-1i64))}
+let size:i64 =ctx.ret() as i64;
+if size < 0 {return Err((-1i64))}
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
 
 let comm:[u8;16]=bpf_get_current_comm().map_err(|e|e as i64)?;
-write_event(pid, comm, arg as u64, 0, 7)   
+write_event(pid, comm, size as u64, 0, 7)   
 }
 
 
