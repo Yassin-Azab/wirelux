@@ -5,9 +5,10 @@ use aya_ebpf::{
     macros::{kprobe,kretprobe, map},
     programs::{ProbeContext, RetProbeContext},
     maps::RingBuf,
-    helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns},
+    helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns, bpf_probe_read_kernel},
     bindings::sock
 };
+use crate::vmlinux::{sock, sock_common};
 use wirelux_common::AppBytes;
 
 const RING_BUF_SIZE: u32= 1024*1024*4;
@@ -48,6 +49,27 @@ unsafe fn try_tcp_sendmsg(ctx: &ProbeContext) -> Result<(), i64>{
 let size: usize=ctx.arg(2).ok_or(-1i64)?;
 if size ==0 { return Err((-1i64)); }
 
+let ip_addr: u32;
+let sock: *mut sock=ctx.arg(0).ok_or(-1i64)?;
+let sk_common= unsafe { bpf_probe_read_kernel(&(*sock).__sk_common as *const sock_common)}?;
+match sk_common.skc_family{
+AF_INET => {
+            let src_addr = u32::from_be(unsafe {
+                sk_common.__bindgen_anon_1.__bindgen_anon_1.skc_rcv_saddr
+            });
+            let dest_addr: u32 = u32::from_be(unsafe {
+                sk_common.__bindgen_anon_1.__bindgen_anon_1.skc_daddr
+            });
+            ip_addr = dest_addr;
+        }
+        AF_INET6 => {
+            let src_addr = sk_common.skc_v6_rcv_saddr;
+            let dest_addr = sk_common.skc_v6_daddr;
+            ip_addr = dest_addr;
+        }
+        _ => return Err((-1i64)),
+}
+
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
 
@@ -67,6 +89,29 @@ pub fn kprobe_udp_send_msg(ctx: ProbeContext) -> u32{
 unsafe fn try_udp_sendmsg(ctx: &ProbeContext) -> Result<(), i64>{
 let size: usize=ctx.arg(2).ok_or(-1i64)?;
 if size ==0 { return Err((-1i64)); }
+
+
+let ip_addr: u32;
+let sock: *mut sock=ctx.arg(0).ok_or(-1i64)?;
+let sk_common= unsafe { bpf_probe_read_kernel(&(*sock).__sk_common as *const sock_common)}?;
+match sk_common.skc_family{
+AF_INET => {
+            let src_addr = u32::from_be(unsafe {
+                sk_common.__bindgen_anon_1.__bindgen_anon_1.skc_rcv_saddr
+            });
+            let dest_addr: u32 = u32::from_be(unsafe {
+                sk_common.__bindgen_anon_1.__bindgen_anon_1.skc_daddr
+            });
+            ip_addr = dest_addr;
+        }
+        AF_INET6 => {
+            let src_addr = sk_common.skc_v6_rcv_saddr;
+            let dest_addr = sk_common.skc_v6_daddr;
+            ip_addr = dest_addr;
+        }
+        _ => return Err((-1i64)),
+}
+
 
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
@@ -88,6 +133,28 @@ let size:i64 =ctx.ret() as i64;
 if size < 0 {return Err((-1i64))}
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
+
+let ip_addr: u32;
+let sock: *mut sock=ctx.arg(0).ok_or(-1i64)?;
+let sk_common= unsafe { bpf_probe_read_kernel(&(*sock).__sk_common as *const sock_common)}?;
+match sk_common.skc_family{
+AF_INET => {
+            let src_addr = u32::from_be(unsafe {
+                sk_common.__bindgen_anon_1.__bindgen_anon_1.skc_rcv_saddr
+            });
+            let dest_addr: u32 = u32::from_be(unsafe {
+                sk_common.__bindgen_anon_1.__bindgen_anon_1.skc_daddr
+            });
+            ip_addr = dest_addr;
+        }
+        AF_INET6 => {
+            let src_addr = sk_common.skc_v6_rcv_saddr;
+            let dest_addr = sk_common.skc_v6_daddr;
+            ip_addr = dest_addr;
+        }
+        _ => return Err((-1i64)),
+}
+
 
 let comm:[u8;16]=bpf_get_current_comm().map_err(|e|e as i64)?;
 write_event(pid, comm, size as u64, 0, 17)

@@ -6,4 +6,4 @@ edition = "2021"
 [dependencies]
 aya-ebpf     = { git = "https://github.com/aya-rs/aya", branch = "main" }
 aya-log-ebpf = { git = "https://github.com/aya-rs/aya", branch = "main" }
-wifi-monitor-common = { path = "../wifi-monitor-common" }
+wirelux-common = { path = "../wirelux-common" }

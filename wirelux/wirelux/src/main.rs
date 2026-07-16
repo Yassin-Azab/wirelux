@@ -9,21 +9,19 @@ use aya::{
 };
 
 use rusqlite::Connection;
-use Tokio;
+use tokio;
 
 use wirelux_common::AppBytes;
 const DEFAULT_DB_PATH: &str="./wirelux_log.db";
 const CONFIG_FILE: &str ="./config.toml";
 const SAVE_INTERVAL_SECS: u64=30;
 
-struct Cli {save_path: PathLine,}
-
 fn print_usage(){
-    println("USAGE: wirelux [OPTIONS]");
-    println();
-    println("Options:");
-    println(" --out <path>   override current path");
-    println("-h, --help     show this message");
+    println!("USAGE: wirelux [OPTIONS]");
+    println!();
+    println!("Options:");
+    println!(" --out <path>   override current path");
+    println!("-h, --help     show this message");
 }
 
 fn load_db()-> Result<PathBuf>{
@@ -59,7 +57,7 @@ while let Some(arg)= args.next(){
         }
         other =>{
             print_usage();
-            eprintln("Unknown Argument");
+            eprintln!("Unknown Argument");
             std::process::exit(1);
         }
     }
@@ -67,6 +65,7 @@ while let Some(arg)= args.next(){
 }
 
 }
-async fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() {
  
 }
