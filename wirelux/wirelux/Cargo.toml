@@ -8,7 +8,6 @@ license.workspace = true
 [dependencies]
 wirelux-common = { path = "../wirelux-common", features = ["user"] }
 rusqlite = "0.40.1"
-env::env_logger
 serde = { version = "1.0", features = ["derive"] }
 anyhow = { workspace = true, default-features = true }
 aya = { workspace = true }
