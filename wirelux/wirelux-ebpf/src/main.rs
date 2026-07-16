@@ -2,10 +2,10 @@
 #![no_main]
 
 use aya_ebpf::{
-    macros::{kprobe,kretprobe, map},
-    programs::{ProbeContext, RetProbeContext},
+    macros::{fexit, map},
+    programs::{ FExitContext},
     maps::RingBuf,
-    helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns, bpf_probe_read_kernel},
+    helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns},
     bindings::sock
 };
 use crate::vmlinux::{sock, sock_common};
@@ -37,15 +37,15 @@ entry.submit(0);
 Ok(())
 }
 
-#[kprobe]
-pub fn kprobe_tcp_send_msg(ctx: ProbeContext) -> u32{
+#[fexit]
+pub fn fexit_tcp_send_msg(ctx: FExitContext) -> u32{
     match unsafe {try_tcp_sendmsg(&ctx)}{
         Ok(_) | Err(_) => 0,
 
     }
 }
 
-unsafe fn try_tcp_sendmsg(ctx: &ProbeContext) -> Result<(), i64>{
+unsafe fn try_tcp_sendmsg(ctx: &FExitContext) -> Result<(), i64>{
 let size: usize=ctx.arg(2).ok_or(-1i64)?;
 if size ==0 { return Err((-1i64)); }
 
@@ -79,14 +79,14 @@ write_event(pid, comm, size as u64, 1, 6)
 }
 
 
-#[kprobe]
-pub fn kprobe_udp_send_msg(ctx: ProbeContext) -> u32{
+#[fexit]
+pub fn fexit_udp_send_msg(ctx: FExitContext) -> u32{
     match unsafe {try_udp_sendmsg(&ctx)}{
         Ok(_) | Err(_) => 0,
     }
 }
 
-unsafe fn try_udp_sendmsg(ctx: &ProbeContext) -> Result<(), i64>{
+unsafe fn try_udp_sendmsg(ctx: &FExitContext) -> Result<(), i64>{
 let size: usize=ctx.arg(2).ok_or(-1i64)?;
 if size ==0 { return Err((-1i64)); }
 
@@ -121,14 +121,14 @@ write_event(pid, comm, size as u64, 1, 17)
 
 }
 
-#[kretprobe]
-pub fn kretprobe_tcp_recv_msg(ctx: RetProbeContext) -> u32{
+#[fexit]
+pub fn fexit_tcp_recv_msg(ctx: FExitContext) -> u32{
     match unsafe{ try_tcp_recvmsg(&ctx)}{
     Ok(_)| Err(_)=> 0,
     }
 }
 
-unsafe fn try_tcp_recvmsg(ctx: &RetProbeContext) ->  Result<(), i64>{
+unsafe fn try_tcp_recvmsg(ctx: &FExitContext) ->  Result<(), i64>{
 let size:i64 =ctx.ret() as i64;
 if size < 0 {return Err((-1i64))}
 let total_id:u64=bpf_get_current_pid_tgid();
@@ -162,8 +162,8 @@ write_event(pid, comm, size as u64, 0, 17)
 }
 
 
-#[kretprobe]
-pub fn kretprobe_udp_recv_msg(ctx: RetProbeContext) -> u32{
+#[fexit]
+pub fn fexit_udp_recv_msg(ctx: FExitContext) -> u32{
     match unsafe{try_udp_recvmsg(&ctx)}{
         Ok(_)| Err(_)=> 0,
     }
