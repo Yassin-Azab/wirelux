@@ -24,7 +24,11 @@ fn build_ebpf(release: bool){
 let root=find_root();
 let mut cmd =Command::new("cargo");
 cmd.current_dir(root.clone()).args([
-    //decide on args
+    "+nightly",
+    "build",
+    "--package", "wirelux-ebpf",
+    "--target", "bpfel-unknown-none",
+    "-Z", "build-std=core"
 ]);
 if release {cmd.arg("--release");}
 let status =match cmd.status().context("failed to run cargo"){

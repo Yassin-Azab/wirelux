@@ -62,7 +62,7 @@ pub fn fexit_tcp_send_msg(ctx: FExitContext) -> u32{
 }
 
 unsafe fn try_tcp_sendmsg(ctx: &FExitContext) -> Result<(), i64>{
-let size:u64=ctx.arg(5);
+let size:u64=ctx.arg(3);
 if size==0 {return Err(-1i64)};
 
 let sock: *const SockCommon=ctx.arg(0);
@@ -83,7 +83,7 @@ pub fn fexit_udp_send_msg(ctx: FExitContext) -> u32{
 }
 
 unsafe fn try_udp_sendmsg(ctx: &FExitContext) -> Result<(), i64>{
-let size:u64 =ctx.arg(5);
+let size:u64 =ctx.arg(3);
 if size==0 {return Err(-1i64)};
 
 let sock: *const SockCommon=ctx.arg(0);
@@ -144,7 +144,7 @@ write_event(size, remoteaddr, pid, localport, 0, 17, comm)
 static LICENSE: [u8; 13] = *b"Dual MIT/GPL\0";
 
 
-#[cfg_attr(not(test), panic_handler)]
+#[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe { core::hint::unreachable_unchecked() }
 }

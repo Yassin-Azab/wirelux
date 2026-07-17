@@ -1,13 +1,13 @@
-use std::{fs, path::{Path, PathBuf}, time::Duration};
+use std::{fs, path::{Path, PathBuf}, time::Duration,net::Ipv4Addr, sync::Arc};
 use libc::user;
 use serde::{Deserialize, Serialize};
 use anyhow::{bail,Context, Result};
 use aya::{
-    Bpf, include_bytes_aligned, maps::{RingBuf, ring_buf}, programs::fexit
+    Bpf, Btf, include_bytes_aligned, maps::{RingBuf, ring_buf}, programs::{FExit, fexit}
 };
 
 use rusqlite::Connection;
-use tokio::{self, io::unix::AsyncFd, signal};
+use tokio::{self, io::unix::AsyncFd, signal,sync::Mutex, time::{interval, Duration}};
 
 use wirelux_common::AppBytes;
 const DEFAULT_DB_PATH: &str="./wirelux_log.db";
@@ -86,15 +86,25 @@ let path= load_db().unwrap_or_else({
     println!("Debug mode disabled");
     let bpf_bytes=include_bytes_aligned!("../../wirelux-ebpf/target/bpfel-unknown-none/release/wirelux-ebpf");
 }
-let mut bpf= Bpf::load(bpf_bytes).context("Failed to load EBPF object.");
-
+let mut bpf= (Bpf::load(bpf_bytes).context("Failed to load EBPF object.")).unwrap_or_else(|e| {
+    eprintln!("Error loading EBPF object: {e}");
+    std::process::exit(1);
+});
+let btf =Btf::from_sys_fs().context("Failed to load BTF from sysfs")?;
 //Attach Fexits here
 
+attach_fexit(&mut bpf, &btf, "fexit_tcp_send_msg", "tcp_sendmsg").context("Failed to attach fexit_tcp_send_msg");
+attach_fexit(&mut bpf, &btf, "fexit_tcp_recv_msg", "tcp_recvmsg").context("Failed to attach fexit_tcp_recv_msg");
+attach_fexit(&mut bpf, &btf, "fexit_udp_send_msg", "udp_sendmsg").context("Failed to attach fexit_udp_send_msg");
+attach_fexit(&mut bpf, &btf, "fexit_udp_recv_msg", "udp_recvmsg").context("Failed to attach fexit_udp_recv_msg");
 
-fn attach_fexists(bpf: &mut Bpf, prog_name: &str, kernel_fn: &str) -> Result<()>{
-let program: &mut fexit= bpf.program_mut(prog_name).with_context(|| println!("Bpf Program '{}' not found in ELF Obj", prog_name))?;
-program.load().with_context(|| println!("Failed to load program '{}'", prog_name))?;
-program.attach(kernel_fn, 0).with_context(|| println!("Failed to attach program '{}' to kernel function '{}'", prog_name, kernel_fn))?;
+
+
+
+fn attach_fexit(bpf:&mut Bpf, btf: &Btf, prog_name: &str, kernel_fn: &str) -> Result<()>{
+let program: &mut FExit= bpf.program_mut(prog_name).with_context(|| println!("Bpf Program '{}' not found in ELF Obj", prog_name)).try_into().with_context("Wrong Program type").unwrap();
+program.load(kernel_fn, btf).with_context(|| println!("Failed to load program '{}'", prog_name))?;
+program.attach().with_context(|| println!("Failed to attach program '{}' to kernel function '{}' BPF Verifier Rejected", prog_name, kernel_fn))?;
 
 Ok(())
 }
@@ -157,35 +167,42 @@ conn.execute_batch(
     CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp_ns INTEGER NOT NULL,
-    pid INTEGER NOT NULL,
-    comms TEXT NOT NULL,
     size INTEGER NOT NULL,
+    remote_addr TEXT NOT NULL,
+    pid INTEGER NOT NULL,
+    local_port INTEGER NOT NULL,
     direction INTEGER NOT NULL,
-    protocol INTEGER NOT NULL)
+    protocol INTEGER NOT NULL
+    comms TEXT NOT NULL);
+    CREATE INDEX IF NOT EXISTS idx_timestamp ON events (timestamp_ns);
+    CREATE INDEX IF NOT EXISTS idx_ip ON events (remote_addr);
     "//Create Indexing after deciding on final AppByte
 ).context("Failed to create events table");
 
 let tx=conn.transaction().context("Failed to start transaction")?;
 {
     let mut stmt=tx.prepare(
-        "INSERT INTO events (timestamp_ns, pid, comms, size, direction, protocol) VALUES (?1, ?2, ?3, ?4, ?5, ?6)"
+        "INSERT INTO events (timestamp_ns, size, remote_addr, pid, local_port, direction, protocol, comms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
     ).context("Failed to prepare insert statement")?;
     for event in events{
-        let comms_str=String::from_utf8_lossy(&event.comms).trim_end_matches('\0').to_string();
+        let comms_str: String=match event.comm.iter().position(|&a| a==0){
+            Some(index) => std::str::from_utf8(&event.comm[..index]).unwrap_or("").to_string(),
+            None => std::str::from_utf8(&event.comm).unwrap_or("").to_string(),
+        };
+        let remote_addr_str=Ipv4Addr::from(event.remote_addr).to_string();  
         stmt.execute(params![
-            event.timestamp_ns,
-            event.pid,
-            comms_str,
+            event.timestamp_ns as i64,
             event.size,
+            remote_addr_str,
+            event.pid,
+            event.local_port,
             event.direction,
-            event.protocol
+            event.protocol,
+            comms_str
         ]).context("Failed to execute insert statement")?;
     }
 }
 let tx =conn.transaction().context("Failed to start transaction")?; 
-{
-    //COmplete after deciding on final AppBytes
-}
 
 Ok(())
 };

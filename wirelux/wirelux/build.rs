@@ -1,6 +1,4 @@
-use anyhow::{Context as _, anyhow};
-use aya_build::Toolchain;
-
-fn main(){
-  
+fn main() {
+    println!("cargo:rerun-if-changed=../wifi-monitor-ebpf/src/main.rs");
+    println!("cargo:rerun-if-changed=../wifi-monitor-ebpf/Cargo.toml");
 }
