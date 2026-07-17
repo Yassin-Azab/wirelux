@@ -17,3 +17,9 @@ Linux only, only Kernel version 5.5 for x86_64, 6+ for ARM. Will not be tested o
 
 Things you may want to change manually:
 Ring Buffer Size. 4Mb is the recommended Default
+
+What this app helps notify against:
+Processes that send too much data for no reason or processes that send data that shouldn't be used at all
+
+What this app doesn't help against:
+Malware that got injected into another important process and isn't using too much data
