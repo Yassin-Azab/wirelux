@@ -2,10 +2,7 @@
 #![no_main]
 
 use aya_ebpf::{
-    macros::{fexit, map},
-    programs::{ FExitContext},
-    maps::RingBuf,
-    helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns},
+    cty::c_int, helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns,bpf_printk}, macros::{fexit, map}, maps::RingBuf, programs::FExitContext,
 };
 use wirelux_common::AppBytes;
 
@@ -35,7 +32,7 @@ unsafe fn write_event(bytes:u64,addr:u32,pid:u32,port:u16,direction:u8,protocol:
 let timestamp_now=unsafe { bpf_ktime_get_ns() };
 let mut entry= match EVENTS.reserve::<AppBytes>(0){
 Some(e)=>e,
-None=>return Err((-1))
+None=>return Err(-1)
 };
 let ptr=entry.as_mut_ptr();
 unsafe{
@@ -62,8 +59,8 @@ pub fn fexit_tcp_send_msg(ctx: FExitContext) -> u32{
 }
 
 unsafe fn try_tcp_sendmsg(ctx: &FExitContext) -> Result<(), i64>{
-let size:u64=ctx.arg(3);
-if size==0 {return Err(-1i64)};
+let actual: i32        = ctx.arg(3);
+if actual<=0 {return Err(-1i64)};
 
 let sock: *const SockCommon=ctx.arg(0);
 let (remoteaddr,localport)=read_sock(sock);
@@ -71,7 +68,7 @@ let (remoteaddr,localport)=read_sock(sock);
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
 let comm:[u8;16]=bpf_get_current_comm().map_err(|e|e as i64)?;
-write_event(size, remoteaddr, pid, localport, 1, 6, comm)
+write_event(actual as u64, remoteaddr, pid, localport, 1, 6, comm)
 }
 
 
@@ -83,8 +80,9 @@ pub fn fexit_udp_send_msg(ctx: FExitContext) -> u32{
 }
 
 unsafe fn try_udp_sendmsg(ctx: &FExitContext) -> Result<(), i64>{
-let size:u64 =ctx.arg(3);
-if size==0 {return Err(-1i64)};
+let size:c_int=ctx.arg(3);
+
+if size<=0 {return Err(-1i64)};
 
 let sock: *const SockCommon=ctx.arg(0);
 let (remoteaddr,localport)=read_sock(sock);
@@ -92,7 +90,7 @@ let (remoteaddr,localport)=read_sock(sock);
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
 let comm:[u8;16]=bpf_get_current_comm().map_err(|e|e as i64)?;
-write_event(size, remoteaddr, pid, localport, 1, 17, comm)
+write_event(size as u64, remoteaddr, pid, localport, 1, 17, comm)
 }
 
 #[fexit(function="tcp_recvmsg")]
@@ -103,8 +101,8 @@ pub fn fexit_tcp_recv_msg(ctx: FExitContext) -> u32{
 }
 
 unsafe fn try_tcp_recvmsg(ctx: &FExitContext) ->  Result<(), i64>{
-let size:u64 =ctx.arg(5);
-if size==0 {return Err(-1i64)};
+let size:i32 =ctx.arg(5);
+if size<=0 {return Err(-1i64)};
 
 let sock: *const SockCommon=ctx.arg(0);
 let (remoteaddr,localport)=read_sock(sock);
@@ -112,7 +110,7 @@ let (remoteaddr,localport)=read_sock(sock);
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
 let comm:[u8;16]=bpf_get_current_comm().map_err(|e|e as i64)?;
-write_event(size, remoteaddr, pid, localport, 0, 6, comm)
+write_event(size as u64, remoteaddr, pid, localport, 0, 6, comm)
 
 }
 
@@ -125,16 +123,16 @@ pub fn fexit_udp_recv_msg(ctx: FExitContext) -> u32{
 }
 
 unsafe fn try_udp_recvmsg(ctx: &FExitContext) -> Result<(), i64>{
-let size:u64 =ctx.arg(5);
-if size==0 {return Err(-1i64)};
+let size:i32 =ctx.arg(5);
+if size<=0 {return Err(-1i64)};
 
 let sock: *const SockCommon=ctx.arg(0);
 let (remoteaddr,localport)=read_sock(sock);
 
 let total_id:u64=bpf_get_current_pid_tgid();
 let pid: u32 = (total_id >> 32) as u32;
-let comm:[u8;16]=bpf_get_current_comm().map_err(|e|e as i64)?;
-write_event(size, remoteaddr, pid, localport, 0, 17, comm)  
+let comm:[u8;16]=bpf_get_current_comm().map_err(|e: i32|e as i64)?;
+write_event(size as u64, remoteaddr, pid, localport, 0, 17, comm)  
 }
 
 
@@ -143,7 +141,7 @@ write_event(size, remoteaddr, pid, localport, 0, 17, comm)
 #[unsafe(no_mangle)]
 static LICENSE: [u8; 13] = *b"Dual MIT/GPL\0";
 
-
+#[cfg(target_arch = "bpf")]
 #[panic_handler]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     unsafe { core::hint::unreachable_unchecked() }

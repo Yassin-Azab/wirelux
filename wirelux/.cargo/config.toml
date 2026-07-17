@@ -1,2 +1,6 @@
-[target."cfg(all())"]
-runner = "sudo -E"
+[alias]
+xtask = "run --package xtask --"
+
+# Only apply sudo to the wirelux binary, not to xtask
+[build]
+target-dir = "target"

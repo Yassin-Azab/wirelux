@@ -4,6 +4,7 @@ members = [
     "wirelux",
     "wirelux-common",
     "wirelux-ebpf",
+    "xtask"
 ]
 default-members = ["wirelux", "wirelux-common"]
 
@@ -34,3 +35,6 @@ which = { version = "6.0.0", default-features = false }
 debug = 2
 codegen-units = 1
 strip = false
+
+[profile.dev]
+panic = "abort"

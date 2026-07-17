@@ -13,7 +13,6 @@ anyhow = { workspace = true, default-features = true }
 aya = { workspace = true }
 aya-log = { workspace = true }
 env_logger = { workspace = true }
-env_logger  = "0.11"
 libc = { workspace = true }
 log = { workspace = true }
 tokio = { workspace = true, features = [
@@ -22,6 +21,8 @@ tokio = { workspace = true, features = [
     "rt-multi-thread",
     "net",
     "signal",
+    "sync",
+    "time",
 ] }
 [build-dependencies]
 anyhow = { workspace = true }
