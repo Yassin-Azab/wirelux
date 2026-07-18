@@ -26,10 +26,10 @@ Cross compilation should work on both Intel and Apple Silicon Macs.
 ```shell
 cargo build --package wirelux --release \
   --target=${ARCH}-unknown-linux-musl \
-  --config=target.${ARCH}-unknown-linux-musl.linker=\"rust-lld\"
+  --config=target.${ARCH}-unknown-linux-musl.linker="rust-lld"
 ```
-The cross-compiled program `target/${ARCH}-unknown-linux-musl/release/wirelux` can be
-copied to a Linux server or VM and run there.
+
+The cross-compiled program `target/${ARCH}-unknown-linux-musl/release/wirelux` can be copied to a Linux server or VM and run there.
 
 ## License
 
