@@ -6,6 +6,7 @@ use aya::{
 use rusqlite::{params, Connection};
 use tokio::{io::unix::AsyncFd, signal, sync::Mutex, time::{interval, Duration}};
 use std::sync::Arc;
+use geolite_lookup::GeoDatabase;
 
 use wirelux_common::AppBytes;
 
@@ -170,7 +171,9 @@ fn find_process_name(pid: u32) -> Option<String>{let proc_path=format!("/proc/{}
     {    return fs::read_to_string(proc_path)
     .map(|name| name.trim().to_string()).ok();}
 None}
-
+fn geolite_lookup(db: &GeoDatabase, ip_addr: &str) -> Result<String> {
+    Ok(db.lookup(ip_addr)?.to_string())
+}
 fn append_to_disk(events: &[AppBytes], db_path: PathBuf) -> Result<()> {
     let mut conn = Connection::open(db_path).context("Failed to open database")?;
     conn.execute_batch(
@@ -184,7 +187,8 @@ fn append_to_disk(events: &[AppBytes], db_path: PathBuf) -> Result<()> {
             local_port INTEGER NOT NULL,
             direction INTEGER NOT NULL,
             protocol INTEGER NOT NULL,
-            comms TEXT NOT NULL
+            comms TEXT NOT NULL,
+            country TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_timestamp ON events (timestamp_ns);
         CREATE INDEX IF NOT EXISTS idx_ip ON events (remote_addr);
@@ -196,12 +200,45 @@ fn append_to_disk(events: &[AppBytes], db_path: PathBuf) -> Result<()> {
     {
         let mut stmt = tx
             .prepare(
-                "INSERT INTO events (timestamp_ns, size, remote_addr, pid, local_port, direction, protocol, comms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO events (timestamp_ns, size, remote_addr, pid, local_port, direction, protocol, comms, country) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             )
             .context("Failed to prepare insert statement")?;
+        // Construct path to geolite.bin relative to cargo workspace
+        let geolite_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("geolite_lookup/geolite.bin"))
+            .unwrap_or_else(|| PathBuf::from("geolite.bin"));
+        
+        let db = match GeoDatabase::open(&geolite_path) {
+    Ok(db) => Some(db),
+    Err(e) => {
+        eprintln!("Warning: could not open {}: {e}", geolite_path.display());
+        None
+    }
+};
         for event in events {
-            let comms_str = find_process_name(event.pid).unwrap_or_else(|| {match event.comm.iter().position(|&a| a == 0) {Some(index) => std::str::from_utf8(&event.comm[..index]).unwrap_or("").to_string(),None => std::str::from_utf8(&event.comm).unwrap_or("").to_string(),}});
+            let comms_str = find_process_name(event.pid).unwrap_or_else(|| {
+                match event.comm.iter().position(|&a| a == 0) {
+                    Some(index) => std::str::from_utf8(&event.comm[..index])
+                        .unwrap_or("")
+                        .to_string(),
+                    None => std::str::from_utf8(&event.comm)
+                        .unwrap_or("")
+                        .to_string(),
+                }
+            });
             let remote_addr_str = Ipv4Addr::from(u32::from_be(event.remote_addr)).to_string();
+            let country = match db.as_ref() {
+    None => "DB didn't open".to_string(),
+    Some(db) => match geolite_lookup(db, &remote_addr_str) {
+        Ok(country) => country,
+        Err(e) => {
+            eprintln!("Lookup failed: {e}");
+            "Not found".to_string()
+        }
+    },
+};
 
             stmt.execute(params![
                 event.timestamp_ns as i64,
@@ -211,7 +248,8 @@ fn append_to_disk(events: &[AppBytes], db_path: PathBuf) -> Result<()> {
                 event.local_port,
                 event.direction,
                 event.protocol,
-                comms_str
+                comms_str,
+                country
             ])
             .context("Failed to execute insert statement")?;
         }

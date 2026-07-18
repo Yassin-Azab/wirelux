@@ -2,7 +2,7 @@
 #![no_main]
 
 use aya_ebpf::{
-    cty::c_int, helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns}, macros::{fexit, map}, maps::RingBuf, programs::FExitContext,
+    cty::c_int, helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_tai_ns}, macros::{fexit, map}, maps::RingBuf, programs::FExitContext,
 };
 use wirelux_common::AppBytes;
 
@@ -29,7 +29,7 @@ const RING_BUF_SIZE: u32= 1024*1024*4;
 
 
 unsafe fn write_event(bytes:u64,addr:u32,pid:u32,port:u16,direction:u8,protocol:u8,comm: [u8;16]) -> Result<(),i64>{
-let timestamp_now=unsafe { bpf_ktime_get_ns() };
+let timestamp_now=unsafe { bpf_ktime_get_tai_ns() };
 let mut entry= match EVENTS.reserve::<AppBytes>(0){
 Some(e)=>e,
 None=>return Err(-1)

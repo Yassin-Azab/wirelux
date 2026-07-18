@@ -1,0 +1,14 @@
+/home/hammer/Documents/Github/Wirelux/geolite_lookup/target/release/deps/serde-68b713f6fe614a97.d: /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/hammer/Documents/Github/Wirelux/geolite_lookup/target/release/build/serde-5d57e5122c34c158/out/private.rs
+
+/home/hammer/Documents/Github/Wirelux/geolite_lookup/target/release/deps/libserde-68b713f6fe614a97.rlib: /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/hammer/Documents/Github/Wirelux/geolite_lookup/target/release/build/serde-5d57e5122c34c158/out/private.rs
+
+/home/hammer/Documents/Github/Wirelux/geolite_lookup/target/release/deps/libserde-68b713f6fe614a97.rmeta: /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/hammer/Documents/Github/Wirelux/geolite_lookup/target/release/build/serde-5d57e5122c34c158/out/private.rs
+
+/home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/hammer/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/home/hammer/Documents/Github/Wirelux/geolite_lookup/target/release/build/serde-5d57e5122c34c158/out/private.rs:
+
+# env-dep:OUT_DIR=/home/hammer/Documents/Github/Wirelux/geolite_lookup/target/release/build/serde-5d57e5122c34c158/out

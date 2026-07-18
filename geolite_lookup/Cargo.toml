@@ -1,0 +1,28 @@
+[package]
+name = "geolite_lookup"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance offline IPv4 -> country lookup backed by a memory-mapped, CIDR/range-based binary database built from MaxMind GeoLite2 Country CSVs."
+
+[lib]
+name = "geolite_lookup"
+path = "src/lib.rs"
+
+[[bin]]
+name = "geolite_lookup"
+path = "src/main.rs"
+
+[[bin]]
+name = "builder"
+path = "src/builder.rs"
+
+[dependencies]
+csv = "1.3"
+serde = { version = "1.0", features = ["derive"] }
+memmap2 = "0.9"
+byteorder = "1.5"
+thiserror = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = true

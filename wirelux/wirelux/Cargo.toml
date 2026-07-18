@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+geolite_lookup = { path = "../../geolite_lookup" }
 wirelux-common = { path = "../wirelux-common", features = ["user"] }
 rusqlite = "0.40.1"
 serde = { version = "1.0", features = ["derive"] }
