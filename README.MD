@@ -1,8 +1,9 @@
 What the code does:
 Monitor each packet for its direction and size sent
+See how much data a process *actually* sent.
 
 What it does not do:
-See how much data a process *actually* sent. It does not focus on how much it tried to send. I had to choose only one-this makes more sense as a network monitoring app.
+It does not focus on how much it tried to send. I had to choose only one-this makes more sense as a network monitoring app.
 
 
 Limitations: 
