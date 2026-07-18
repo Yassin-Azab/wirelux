@@ -1,18 +1,19 @@
-use std::{fs, path::{Path, PathBuf}, net::Ipv4Addr, sync::Arc};
+use std::{fs, path::{Path, PathBuf}, net::Ipv4Addr};
 use anyhow::{Context, Result};
 use aya::{
-    Ebpf, Btf, include_bytes_aligned, maps::RingBuf, programs::FExit
+    maps::{RingBuf}, programs::FExit, Btf, Ebpf, include_bytes_aligned,
 };
-
-use rusqlite::{Connection, params};
-use tokio::{self, io::unix::AsyncFd, signal, sync::Mutex, time::{interval, Duration}};
+use rusqlite::{params, Connection};
+use tokio::{io::unix::AsyncFd, signal, sync::Mutex, time::{interval, Duration}};
+use std::sync::Arc;
 
 use wirelux_common::AppBytes;
-const DEFAULT_DB_PATH: &str="./wirelux_log.db";
-const CONFIG_FILE: &str ="./config.toml";
-const SAVE_INTERVAL_SECS: u64=30;
 
-fn print_usage(){
+const DEFAULT_DB_PATH: &str = "./wirelux_log.db";
+const CONFIG_FILE:     &str = "./config.toml";
+const SAVE_INTERVAL_SECS: u64 = 30;
+
+fn print_usage() {
     println!("USAGE: wirelux [OPTIONS]");
     println!();
     println!("Options:");
@@ -20,8 +21,8 @@ fn print_usage(){
     println!("-h, --help     show this message");
 }
 
-fn load_db()-> Result<PathBuf>{
-    if !Path::new(CONFIG_FILE).exists(){fs::write(CONFIG_FILE,DEFAULT_DB_PATH)?};
+fn load_db() -> Result<PathBuf> {
+    if !Path::new(CONFIG_FILE).exists() { fs::write(CONFIG_FILE, DEFAULT_DB_PATH)?; }
     let contents = fs::read_to_string(CONFIG_FILE)?;
     let contents = if contents.trim().is_empty() {
         fs::write(CONFIG_FILE, DEFAULT_DB_PATH)?;
@@ -30,42 +31,39 @@ fn load_db()-> Result<PathBuf>{
         contents
     };
     let first_line = contents.lines().next().context("config.toml is empty")?.trim();
-    let path = PathBuf::from(first_line);
-    Ok(path)
+    Ok(PathBuf::from(first_line))
 }
 
 fn parse_args() {
-let mut args =std::env::args().skip(1);
-while let Some(arg)= args.next(){
-    match arg.as_str(){
-        "--out"=> {
-            let new_path=match args.next(){
-                Some(path) =>PathBuf::from(path),
-                None => {
-                    eprintln!("Error: --out requires a path");
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--out" => {
+                let new_path = match args.next() {
+                    Some(path) => PathBuf::from(path),
+                    None => {
+                        eprintln!("Error: --out requires a path");
+                        std::process::exit(1);
+                    }
+                };
+                if let Err(e) = fs::write(CONFIG_FILE, new_path.to_string_lossy().to_string()) {
+                    eprintln!("error writing config file: {e}");
                     std::process::exit(1);
                 }
-            }; 
-            if let Err(e)=fs::write(CONFIG_FILE, new_path.clone().to_string_lossy().to_string()){
-                eprintln!("error writing config file: {e})");
-                std::process::exit(1);
-
             }
-        },
-        "-h" | "--help" => {
-            print_usage();
-            std::process::exit(0);
-        }
-        _ => {
-            print_usage();
-            eprintln!("Unknown Argument");
-            std::process::exit(1);
+            "-h" | "--help" => {
+                print_usage();
+                std::process::exit(0);
+            }
+            _ => {
+                print_usage();
+                eprintln!("Unknown Argument");
+                std::process::exit(1);
+            }
         }
     }
-
 }
 
-}
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
@@ -78,67 +76,60 @@ async fn main() -> Result<()> {
     let bpf_bytes = include_bytes_aligned!("../../target/bpfel-unknown-none/release/wirelux-ebpf");
     let mut bpf = Ebpf::load(bpf_bytes).context("Failed to load EBPF object.")?;
     let btf = Btf::from_sys_fs().context("Failed to load BTF from sysfs")?;
-    
+
     attach_fexit(&mut bpf, &btf, "fexit_tcp_send_msg", "tcp_sendmsg")?;
     attach_fexit(&mut bpf, &btf, "fexit_tcp_recv_msg", "tcp_recvmsg")?;
     attach_fexit(&mut bpf, &btf, "fexit_udp_send_msg", "udp_sendmsg")?;
     attach_fexit(&mut bpf, &btf, "fexit_udp_recv_msg", "udp_recvmsg")?;
 
-    let bpf_leaked = Box::leak(Box::new(bpf));
-    
+    let ring_map = bpf.take_map("EVENTS").context("EVENTS map not found")?;
+    let ring_buf = RingBuf::try_from(ring_map).context("Failed to convert EVENTS to RingBuf")?;
+    let async_ring = AsyncFd::new(ring_buf).context("Failed to create async ring buffer")?;
+
     let shared_events: Arc<Mutex<Vec<AppBytes>>> = Arc::new(Mutex::new(Vec::new()));
     let shared_events_reader = Arc::clone(&shared_events);
-    let shared_events_saver = Arc::clone(&shared_events);
-
-    let userspace_buff = RingBuf::try_from(bpf_leaked.map_mut("EVENTS").ok_or(anyhow::anyhow!("EVENTS map not found"))?)
-        .context("Failed to get events ring buffer")?;
-    let async_ring = AsyncFd::new(userspace_buff).context("Failed to create async ring buffer")?;
-    let async_ring = Arc::new(Mutex::new(async_ring));
+    let shared_events_saver  = Arc::clone(&shared_events);
 
     let reader_task = tokio::spawn({
         let shared_events_reader = shared_events_reader.clone();
-        let async_ring = async_ring.clone();
         async move {
+            let mut async_ring = async_ring;
             loop {
-                let mut ring_lock = async_ring.lock().await;
-                let mut guard = match ring_lock.readable_mut().await {
-                    Ok(g) => g,
-                    Err(e) => {
-                        eprintln!("Error waiting for ring buffer: {e}");
-                        break;
-                    }
+                let mut guard = match async_ring.readable_mut().await {
+                    Ok(g)  => g,
+                    Err(e) => { eprintln!("Error waiting for ring buffer: {e}"); break; }
                 };
                 let ring = guard.get_inner_mut();
                 while let Some(entry) = ring.next() {
                     if entry.len() == std::mem::size_of::<AppBytes>() {
                         let event = unsafe { &*(entry.as_ptr() as *const AppBytes) };
-                        let event_copy = *event;
-                        let mut events = shared_events_reader.lock().await;
-                        events.push(event_copy);
+                        shared_events_reader.lock().await.push(*event);
                     }
                 }
                 guard.clear_ready();
-                drop(ring_lock);
             }
         }
     });
 
     let path_saver = path.clone();
     let shared_events_saver_clone = Arc::clone(&shared_events_saver);
-    let mut last_saved_index: usize = 0;
 
     let saver_task = tokio::task::spawn(async move {
         let mut ticker = interval(Duration::from_secs(SAVE_INTERVAL_SECS));
         loop {
             ticker.tick().await;
-            let events = shared_events_saver_clone.lock().await;
-            let new_events: &[AppBytes] = &events[last_saved_index..];
-            if !new_events.is_empty() {
-                match append_to_disk(new_events, path_saver.clone()) {
-                    Ok(()) => {
-                        last_saved_index += new_events.len();
-                    }
-                    Err(e) => eprintln!("Error saving events to disk: {e}"),
+
+            let batch: Vec<AppBytes> = {
+                let mut events = shared_events_saver_clone.lock().await;
+                std::mem::take(&mut *events) // empties the Vec; lock released right after
+            };
+
+            if !batch.is_empty() {
+                let path = path_saver.clone();
+                match tokio::task::spawn_blocking(move || append_to_disk(&batch, path)).await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => eprintln!("Error saving events to disk: {e}"),
+                    Err(e)     => eprintln!("Saver task panicked: {e}"),
                 }
             }
         }
@@ -148,15 +139,17 @@ async fn main() -> Result<()> {
     println!("Ctrl+C received, saving events to disk...");
     reader_task.abort();
     saver_task.abort();
-    let events = shared_events.lock().await;
-    let remaining: &[AppBytes] = &events[last_saved_index..];
+
+    let remaining: Vec<AppBytes> = {
+        let mut events = shared_events.lock().await;
+        std::mem::take(&mut *events)
+    };
     if !remaining.is_empty() {
-        append_to_disk(remaining, path.clone())?;
+        tokio::task::spawn_blocking(move || append_to_disk(&remaining, path.clone())).await??;
         println!("Events saved to disk successfully.");
     }
     Ok(())
 }
-
 
 fn attach_fexit(bpf: &mut Ebpf, btf: &Btf, prog_name: &str, kernel_fn: &str) -> Result<()> {
     let program: &mut FExit = bpf
@@ -169,10 +162,14 @@ fn attach_fexit(bpf: &mut Ebpf, btf: &Btf, prog_name: &str, kernel_fn: &str) -> 
         .with_context(|| format!("Failed to load program '{}'", prog_name))?;
     program
         .attach()
-        .with_context(|| format!("Failed to attach program '{}' to kernel function '{}' BPF Verifier Rejected", prog_name, kernel_fn))?;
-
+        .with_context(|| format!("Failed to attach program '{}' to kernel function '{}' — BPF verifier rejected it", prog_name, kernel_fn))?;
     Ok(())
 }
+fn find_process_name(pid: u32) -> Option<String>{let proc_path=format!("/proc/{}/comm",pid);
+    if Path::new(&proc_path).exists()
+    {    return fs::read_to_string(proc_path)
+    .map(|name| name.trim().to_string()).ok();}
+None}
 
 fn append_to_disk(events: &[AppBytes], db_path: PathBuf) -> Result<()> {
     let mut conn = Connection::open(db_path).context("Failed to open database")?;
@@ -190,7 +187,8 @@ fn append_to_disk(events: &[AppBytes], db_path: PathBuf) -> Result<()> {
             comms TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_timestamp ON events (timestamp_ns);
-        CREATE INDEX IF NOT EXISTS idx_ip ON events (remote_addr);",
+        CREATE INDEX IF NOT EXISTS idx_ip ON events (remote_addr);
+        CREATE INDEX IF NOT EXISTS idx_pid ON events (pid);",
     )
     .context("Failed to create events table")?;
 
@@ -202,13 +200,9 @@ fn append_to_disk(events: &[AppBytes], db_path: PathBuf) -> Result<()> {
             )
             .context("Failed to prepare insert statement")?;
         for event in events {
-            let comms_str: String = match event.comm.iter().position(|&a| a == 0) {
-                Some(index) => {
-                    std::str::from_utf8(&event.comm[..index]).unwrap_or("").to_string()
-                }
-                None => std::str::from_utf8(&event.comm).unwrap_or("").to_string(),
-            };
-            let remote_addr_str = Ipv4Addr::from(event.remote_addr).to_string();
+            let comms_str = find_process_name(event.pid).unwrap_or_else(|| {match event.comm.iter().position(|&a| a == 0) {Some(index) => std::str::from_utf8(&event.comm[..index]).unwrap_or("").to_string(),None => std::str::from_utf8(&event.comm).unwrap_or("").to_string(),}});
+            let remote_addr_str = Ipv4Addr::from(u32::from_be(event.remote_addr)).to_string();
+
             stmt.execute(params![
                 event.timestamp_ns as i64,
                 event.size as i64,
@@ -223,6 +217,5 @@ fn append_to_disk(events: &[AppBytes], db_path: PathBuf) -> Result<()> {
         }
     }
     tx.commit().context("Failed to commit transaction")?;
-
     Ok(())
 }

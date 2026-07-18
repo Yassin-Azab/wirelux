@@ -2,7 +2,7 @@
 #![no_main]
 
 use aya_ebpf::{
-    cty::c_int, helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns,bpf_printk}, macros::{fexit, map}, maps::RingBuf, programs::FExitContext,
+    cty::c_int, helpers::{bpf_get_current_comm,bpf_get_current_pid_tgid,bpf_ktime_get_ns}, macros::{fexit, map}, maps::RingBuf, programs::FExitContext,
 };
 use wirelux_common::AppBytes;
 
@@ -134,8 +134,6 @@ let pid: u32 = (total_id >> 32) as u32;
 let comm:[u8;16]=bpf_get_current_comm().map_err(|e: i32|e as i64)?;
 write_event(size as u64, remoteaddr, pid, localport, 0, 17, comm)  
 }
-
-
 
 #[unsafe(link_section = "license")]
 #[unsafe(no_mangle)]
