@@ -15,7 +15,7 @@
 
 `wirelux` instruments kernel network sending and receiving for IPv4 TCP/UDP traffic and saves the collected events to SQLite. It reports how much data each process **actually** transmits and receives — not what it attempted to send — using kernel function-exit (`fexit`) probes instead of kprobes for just to support the feature of recording the remote address
 
-Inspired by [GlassWire](https://www.glasswire.com/) (Windows), built for Linux.
+Inspired by [GlassWire](https://www.glasswire.com/) (Windows), built for Linux. Developed on 7.0.9 Parrot OS, user-tested on 7.0.12 Kali.
 
 ## Table of contents
 
