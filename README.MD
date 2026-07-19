@@ -13,7 +13,7 @@
 
 ---
 
-`wirelux` instruments kernel network sending and receiving for IPv4 TCP/UDP traffic and saves the collected events to SQLite. It reports how much data each process **actually** transmits and receives — not what it merely attempted to send, and not dropped packets — using kernel function-exit (`fexit`) probes instead of kprobes for lower overhead and direct, typed access to kernel structures.
+`wirelux` instruments kernel network sending and receiving for IPv4 TCP/UDP traffic and saves the collected events to SQLite. It reports how much data each process **actually** transmits and receives — not what it attempted to send — using kernel function-exit (`fexit`) probes instead of kprobes for just to support the feature of recording the remote address
 
 Inspired by [GlassWire](https://www.glasswire.com/) (Windows), built for Linux.
 
@@ -47,17 +47,18 @@ Inspired by [GlassWire](https://www.glasswire.com/) (Windows), built for Linux.
 | `udp_sendmsg` | UDP, outbound |
 | `udp_recvmsg` | UDP, inbound  |
 
-For every call, it records the actual byte count, the remote IPv4 address, the local port, the owning PID, the protocol, and the process's command name. A background task batches these events and flushes them to a local SQLite database on a fixed interval.
+For every call, it records the actual byte count, the remote IPv4 address, the local port, the owning PID, the protocol, and the process's command name. (Technically its the executing thread). A background task batches these events and flushes them to a local SQLite database on a fixed interval.
 
 ## Features
 
 - **Actual bytes, not attempted bytes.** Reads each function's return value, not the requested size — so a short write or a failed call doesn't get logged as a full-size success.
 - **Per-process attribution.** Every event is tied to a PID and a process name.
 - **Remote IP + local port capture.** Read directly off the kernel's socket structure at exit time.
-- **SQLite persistence.** WAL-mode, indexed by timestamp, remote address, and PID.
-- **Low overhead.** Built on `fexit`/BTF trampolines rather than kprobe/kretprobe — no register-snapshot parsing, no trap-based instrumentation.
-- **Optional GeoIP country lookup** for remote addresses.
+- **SQLite persistence.** WAL-mode, indexed by timestamp, remote address, and PID. WAL used so that the DB doesnt become corrupted during sudden abort, only recent packets are at risk.
+- **Low overhead.** Built on `fexit`/BTF trampolines rather than kprobe/kretprobe
+- **GeoIP country lookup** for remote addresses.
 - **Configurable** ring buffer size and save interval.
+- **GUI** provides a map of all the connected countries
 
 ## Architecture
 
@@ -168,7 +169,7 @@ cargo +nightly run -p xtask -- build-ebpf --release
 `wirelux` looks for a GeoIP database at `../geolite_lookup/geolite.bin`, relative to the `wirelux` crate directory.
 
 - **Present and loads successfully** → remote IPs are resolved to country names in the `country` column.
-- **Missing** → events still save normally; `country` contains a fallback message instead.
+- **Missing** → events still save normally;
 
 ---
 
@@ -277,15 +278,13 @@ Rebuild after changing either.
 
 ## Limitations
 
-- **Linux-only.** Depends on eBPF, BTF, and kernel `fexit` support.
 - **x86_64 only, verified.** ARM is not tested by this repository.
-- **IPv4 only.** The event data format uses `u32` addresses.
+- **IPv4 only.** The event data format uses `u32` addresses. IPv6 gets dropped completely.
 - **Assumes a specific `sock_common` layout** and kernel BTF metadata; unsupported or unusual kernels may fail verifier checks or yield invalid data.
-- **No per-interface uniqueness** — traffic isn't distinguished by network interface.
-- **Dropped packets are invisible by design**, to avoid destabilizing the eBPF program.
+- **No per-interface uniqueness** — traffic can't be distinguished by network interface. 
+- **Dropped packets are invisible by design**, to avoid destabilizing the eBPF program. (Very delicate)
 - **UDP truncation:** if a UDP receive buffer is smaller than the incoming datagram, the recorded size is the datagram's full length, not the bytes actually copied into the buffer.
-- **Process name accuracy is approximate.** It reads `/proc/<pid>/comm` and falls back to the kernel-captured `comm` value; both can be stale or wrong if a PID is reused quickly.
-- **GeoIP is optional.** Without `geolite.bin`, events still save, but `country` holds a fallback message instead of a real lookup.
+- **Process name accuracy is approximate.** It reads `/proc/<pid>/comm` and falls back to the kernel-captured `comm` value; both can be stale or wrong if a PID is reused quickly. To reduce risk of wrong process name captured, reduce SAVE_INTERVAL_SECS
 
 ## What this project is (and isn't) for
 
