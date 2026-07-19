@@ -176,7 +176,7 @@ cargo build --package wirelux --release
 sudo ./target/release/wirelux
 ```
 Or, if you dont want to give full sudo perms:
-````bash
+```bash
 sudo setcap cap_bpf,cap_perfmon+ep target/release/wirelux
 ./target/release/wirelux
 ```
