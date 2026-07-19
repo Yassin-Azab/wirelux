@@ -34,12 +34,8 @@ export function createProjection(width, height) {
 export function createZoom(svg, mapGroup) {
   const zoom = d3.zoom()
     .scaleExtent([1, 20])
-    // Only allow drag (pointer events), block wheel / scroll zoom
-    .filter(event => {
-      if (event.type === 'wheel') return false;
-      if (event.type === 'dblclick') return false; // we handle dblclick manually
-      return true;
-    })
+    // Block only dblclick from the built-in zoom; we handle it manually below
+    .filter(event => event.type !== 'dblclick')
     .on('zoom', event => {
       mapGroup.attr('transform', event.transform);
     });

@@ -28,6 +28,7 @@ Inspired by [GlassWire](https://www.glasswire.com/) (Windows), built for Linux.
 - [Build and run](#build-and-run)
 - [Configuration](#configtoml)
 - [GeoIP lookup](#geoip-lookup)
+- [**GUI — Wirelux Dashboard**](#gui--wirelux-dashboard)
 - [Tuning](#tuning)
 - [Limitations](#limitations)
 - [What this project is (and isn't) for](#what-this-project-is-and-isnt-for)
@@ -169,6 +170,91 @@ cargo +nightly run -p xtask -- build-ebpf --release
 - **Present and loads successfully** → remote IPs are resolved to country names in the `country` column.
 - **Missing** → events still save normally; `country` contains a fallback message instead.
 
+---
+
+## GUI — Wirelux Dashboard
+
+Wirelux ships a local web-based NOC dashboard that reads directly from the SQLite database recorded by the eBPF collector. It runs entirely on your machine — no cloud, no telemetry.
+
+### What the GUI provides
+
+| Feature | Detail |
+|---|---|
+| World map | Offline Natural Earth projection (D3 + world-atlas). Scroll to zoom, drag to pan, double-click to recenter. |
+| Connection arcs | Animated curved arcs from your origin country to every destination country in the database. |
+| Country nodes | Glowing pulsing dots at each country that has recorded traffic. |
+| Connection tooltip | Hover any arc to see total bytes, incoming/outgoing split, packet count, unique processes, top process, timestamps, and protocols. |
+| Process panel | Per-process bandwidth bars, automatically sized to fit the panel. Processes that don't fit are aggregated into an "Other Processes" row. |
+| Filters | Direction (Incoming / Outgoing / Both), Protocol (TCP / UDP / All), Time range (10 min → All Time), Process search, Country search. All filters apply as SQL `WHERE` clauses server-side — no client-side filtering. |
+| Auto-refresh | Data refreshes every 5 seconds automatically. |
+
+### GUI prerequisites
+
+The GUI requires **Node.js v18 or later**. Install it with your package manager or via [nvm](https://github.com/nvm-sh/nvm):
+
+```bash
+# Recommended — using nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+nvm install --lts
+
+# Or via apt (Ubuntu/Debian)
+sudo apt install nodejs npm
+
+# Verify
+node --version   # must be v18+
+npm --version
+```
+
+No other system dependencies are required. The GUI does **not** need Electron, a backend server, or any cloud service.
+
+### Install GUI dependencies (first time only)
+
+```bash
+cd GUI
+npm install
+npm approve-scripts better-sqlite3
+npm approve-scripts esbuild
+```
+
+> `better-sqlite3` is a native SQLite binding compiled against your local Node version.
+> The `approve-scripts` step runs its build — this only needs to be done once.
+> If you upgrade Node.js later, re-run `npm install` inside `GUI/` to rebuild the binding.
+
+### Open the GUI
+
+Make sure the `wirelux` collector is running (or has previously run and populated the database), then:
+
+```bash
+cd GUI
+npm run dev
+```
+
+This starts a local development server. Open your browser to:
+
+```
+http://localhost:5173
+```
+
+The dashboard loads automatically. It reads the database path from `../wirelux/config.toml` — no manual configuration needed.
+
+### Close the GUI
+
+Press **Ctrl + C** in the terminal where `npm run dev` is running. This stops the local server. Your browser tab will lose connection; simply close it.
+
+The database and all collected data are unaffected — the GUI is read-only.
+
+### Troubleshooting the GUI
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `better-sqlite3` failed to compile | Node version mismatch or missing build tools | Run `npm install` again; ensure `gcc` / `g++` / `python3` are installed (`sudo apt install build-essential`) |
+| Map doesn't appear | `world-atlas` asset not found | Run `npm install` from `GUI/` to ensure `node_modules/world-atlas/` is populated |
+| "0 countries" shown | Database has no `country` data | Ensure `geolite.bin` is present and `wirelux` has been running long enough to capture traffic |
+| Port 5173 already in use | Another process is using the port | Either stop that process, or edit `GUI/vite.config.js` and change `port: 5173` to another value |
+
+---
+
+
 ## Tuning
 
 ### Ring buffer size
@@ -213,6 +299,7 @@ This is a visibility tool, not an intrusion-detection or anti-malware system.
 ## Roadmap
 
 - [x] Country lookup for remote IPs
+- [ ] Run At Startup (Top Priority)
 - [ ] YARA rule integration for malware scanning
 - [ ] Total bytes sent, reported per network interface
 - [ ] IPv6 support
