@@ -109,48 +109,79 @@ If `/sys/kernel/btf/vmlinux` doesn't exist on your system, `wirelux` cannot run 
 
 ## Prerequisites
 
-1. **Install Rust.**
-   - Recommended: `rustup toolchain install stable`
-   - If you hit BPF build issues: `rustup toolchain install nightly`
-2. **Install `bpf-linker`.**
-   - `cargo install bpf-linker`
-   - On macOS, install LLVM first, then: `cargo install bpf-linker --no-default-features`
-3. **Cross-compiling from macOS or another host?**
-   - `rustup target add ${ARCH}-unknown-linux-musl`
-   - For Apple Silicon/Intel macOS, use `rust-lld` or another cross linker.
+### 1. Rust — stable and nightly
+
+wirelux needs both toolchains: stable for the userspace binary, and nightly with `rust-src` for the eBPF crate, which is built with `-Z build-std=core`.
+
+If Rust isn't installed yet:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh 
+source "$HOME/.cargo/env"
+```
+When asked which installation to use, just press enter.
+
+This installs `rustup` along with `cargo` and `rustc`. Then install both toolchains:
+
+```bash
+rustup install stable
+rustup toolchain install nightly --component rust-src
+```
+
+Verify the install:
+
+```bash
+rustc --version
+cargo --version
+```
+
+### 2. `bpf-linker`
+
+`bpf-linker` links the compiled eBPF object and depends on LLVM 19 internally. Building it from source (`cargo install bpf-linker`) means matching that LLVM version yourself — the project itself now recommends against this for most users in favor of a prebuilt binary via `cargo-binstall`:
+
+```bash
+cargo install cargo-binstall
+cargo binstall bpf-linker
+```
+
+On macOS, if you do need to build from source: install LLVM first, then `cargo install bpf-linker --no-default-features`.
+
+### 3. System packages (Debian/Ubuntu/Kali)
+
+```bash
+sudo apt update
+sudo apt install -y clang llvm bpftool build-essential lld pkg-config
+sudo apt install -y sqlite3 libsqlite3-dev
+sudo apt install -y libelf-dev zlib1g-dev
+```
+
+- `clang` / `llvm` — used for inspecting BPF objects, and by `bpf-linker` if built from source.
+- `bpftool` — lets you inspect your kernel's live BTF directly (`bpftool btf dump file /sys/kernel/btf/vmlinux ...`), the most reliable way to confirm a function's real signature if the verifier ever rejects one of wirelux's probes (see [Troubleshooting](#troubleshooting)).
+
+### 4. Cross-compiling from macOS or another host
+
+```bash
+rustup target add ${ARCH}-unknown-linux-musl
+```
+
+For Apple Silicon/Intel macOS, use `rust-lld` or another cross linker.
 
 ## Build and run
 
 From `wirelux/wirelux`:
 
 ```bash
+cargo xtask build-ebpf --release
 cargo build --package wirelux --release
-cargo run --package wirelux --release
+sudo ./target/release/wirelux
+```
+Or, if you dont want to give full sudo perms:
+````bash
+sudo setcap cap_bpf,cap_perfmon+ep target/release/wirelux
+./target/release/wirelux
 ```
 
-This build path automatically compiles the eBPF object and embeds it into the binary.
-
-### Run with a custom database path
-
-```bash
-cargo run --package wirelux --release -- --out /tmp/wirelux_log.db
-```
-
-The custom path is persisted to `config.toml`.
-
-### Optional build helper
-
-An `xtask` helper builds only the eBPF crate:
-
-```bash
-cargo run -p xtask -- build-ebpf --release
-```
-
-Force a nightly build for the eBPF target if needed:
-
-```bash
-cargo +nightly run -p xtask -- build-ebpf --release
-```
+This build path automatically compiles the eBPF object and embeds it into the binary. Loading and attaching BPF programs requires elevated privileges — see [Running without full root](#running-without-full-root) below if you'd rather not run as `sudo`.
 
 ## `config.toml`
 
@@ -194,16 +225,20 @@ Wirelux ships a local web-based NOC dashboard that reads directly from the SQLit
 The GUI requires **Node.js v18 or later**. Install it with your package manager or via [nvm](https://github.com/nvm-sh/nvm):
 
 ```bash
-# Recommended — using nvm
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-nvm install --lts
+# Download and install nvm:
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.6/install.sh | bash
 
-# Or via apt (Ubuntu/Debian)
-sudo apt install nodejs npm
+# in lieu of restarting the shell
+\. "$HOME/.nvm/nvm.sh"
 
-# Verify
-node --version   # must be v18+
-npm --version
+# Download and install Node.js:
+nvm install 24
+
+# Verify the Node.js version:
+node -v # Should print "v24.18.0".
+
+# Verify npm version:
+npm -v # Should print "11.16.0".
 ```
 
 No other system dependencies are required. The GUI does **not** need Electron, a backend server, or any cloud service.
@@ -214,11 +249,8 @@ No other system dependencies are required. The GUI does **not** need Electron, a
 cd GUI
 npm install
 npm approve-scripts better-sqlite3
-npm approve-scripts esbuild
 ```
-
 > `better-sqlite3` is a native SQLite binding compiled against your local Node version.
-> The `approve-scripts` step runs its build — this only needs to be done once.
 > If you upgrade Node.js later, re-run `npm install` inside `GUI/` to rebuild the binding.
 
 ### Open the GUI
@@ -299,9 +331,9 @@ This is a visibility tool, not an intrusion-detection or anti-malware system.
 
 - [x] Country lookup for remote IPs
 - [ ] Run At Startup (Top Priority)
-- [ ] YARA rule integration for malware scanning
 - [ ] Total bytes sent, reported per network interface
 - [ ] IPv6 support
+- [ ] YARA rule integration for malware scanning
 - [ ] Include local IP addresses in events
 
 ## Troubleshooting
